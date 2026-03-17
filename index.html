@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Homeostasis</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #2a255a;
+    --panel-bg: rgba(20, 17, 60, 0.85);
+    --border: rgba(120, 100, 255, 0.25);
+    --accent: #7c6ff7;
+    --accent2: #c084fc;
+    --text: #d4d0ff;
+    --text-dim: #8580b8;
+    --health-green: #4ade80;
+    --health-red: #f87171;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Rajdhani', sans-serif;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel-bg);
+    backdrop-filter: blur(12px);
+    flex-shrink: 0;
+    z-index: 200;
+  }
+  header h1 {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 1.1rem;
+    letter-spacing: 0.25em;
+    color: var(--accent2);
+    text-transform: uppercase;
+    text-shadow: 0 0 18px rgba(192,132,252,0.5);
+  }
+
+  /* ── Dropdown ── */
+  .filter-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .filter-wrap label {
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+  }
+  #sys-select {
+    appearance: none;
+    -webkit-appearance: none;
+    background: rgba(20,17,60,0.9);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 5px 32px 5px 12px;
+    border-radius: 20px;
+    cursor: pointer;
+    outline: none;
+    min-width: 170px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  #sys-select:hover, #sys-select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 10px rgba(124,111,247,0.2);
+  }
+  #sys-select option { background: #1a1740; color: var(--text); }
+  .select-arrow { position: absolute; right: 12px; pointer-events: none; color: var(--accent2); font-size: 0.65rem; }
+
+  /* ── Main Layout ── */
+  .main { display: flex; flex: 1; overflow: hidden; position: relative; }
+
+  /* ── Viewport ── */
+  #viewport { flex: 1; overflow: hidden; position: relative; cursor: grab; }
+  #viewport.grabbing { cursor: grabbing; }
+  #world { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
+
+  #human-body { position: relative; width: 500px; height: 1100px; }
+  #human-body img.body-base {
+    position: absolute; top: 0; left: 0;
+    width: 500px; height: 1100px;
+    pointer-events: none; user-select: none;
+    filter: drop-shadow(0 0 30px rgba(124,111,247,0.3));
+    opacity: 0.9;
+  }
+
+  /* ── Organ Sprites ── */
+  .organ-wrap {
+    position: absolute;
+    transform-origin: center center;
+    cursor: pointer;
+    transition: opacity 0.3s;
+    /* Note: transform is driven fully by JS for animated organs */
+  }
+  .organ-wrap.hidden { opacity: 0 !important; pointer-events: none; }
+  .organ-wrap img { display: block; pointer-events: none; user-select: none; }
+
+  /* ── Status pulses (health / functionality) ── */
+  @keyframes pulseRed {
+    0%,100% { filter: drop-shadow(0 0 4px rgba(248,113,113,0.6)); }
+    50%     { filter: drop-shadow(0 0 18px rgba(248,113,113,1)) brightness(0.8); }
+  }
+  @keyframes pulseBlack {
+    0%,100% { filter: brightness(0.9) drop-shadow(0 0 4px rgba(10,10,30,0.8)); }
+    50%     { filter: brightness(0.35) drop-shadow(0 0 14px rgba(10,10,30,1)); }
+  }
+  @keyframes pulseBoth {
+    0%,100% { filter: drop-shadow(0 0 6px rgba(248,113,113,0.7)) brightness(0.8); }
+    50%     { filter: drop-shadow(0 0 14px rgba(248,113,113,1)) brightness(0.4); }
+  }
+
+  .organ-wrap.pulse-health img { animation: pulseRed   1.2s ease-in-out infinite; }
+  .organ-wrap.pulse-func   img { animation: pulseBlack 1.1s ease-in-out infinite; }
+  .organ-wrap.pulse-both   img { animation: pulseBoth  1.0s ease-in-out infinite; }
+
+  /* Hover glow only on non-animated organs */
+  .organ-wrap:not(.hidden):not(.pulse-health):not(.pulse-func):not(.pulse-both):not(.anim-heart):not(.anim-lung):hover img {
+    filter: drop-shadow(0 0 10px rgba(192,132,252,0.9)) brightness(1.1);
+  }
+
+  /* ── Side Panel ── */
+  #side-panel {
+    width: 300px; flex-shrink: 0;
+    background: var(--panel-bg);
+    border-left: 1px solid var(--border);
+    backdrop-filter: blur(12px);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .panel-header { padding: 16px 20px 10px; border-bottom: 1px solid var(--border); }
+  .panel-header h2 { font-size: 0.65rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--text-dim); }
+  #selected-name { font-size: 1.5rem; font-weight: 700; color: #fff; margin-top: 2px; letter-spacing: 0.05em; }
+
+  .organ-list-section {
+    flex: 1; overflow-y: auto; padding: 10px 12px;
+    scrollbar-width: thin; scrollbar-color: var(--accent) transparent;
+  }
+  .organ-card {
+    padding: 10px 12px; border-radius: 8px;
+    border: 1px solid var(--border); margin-bottom: 8px;
+    cursor: pointer; transition: border-color 0.2s, background 0.2s;
+    background: rgba(255,255,255,0.02);
+  }
+  .organ-card:hover    { border-color: var(--accent); background: rgba(124,111,247,0.06); }
+  .organ-card.selected { border-color: var(--accent2); background: rgba(192,132,252,0.1); }
+  .card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .card-name    { font-size: 0.95rem; font-weight: 600; letter-spacing: 0.05em; }
+  .card-systems { font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); }
+
+  .bar-row    { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .bar-label  { font-size: 0.65rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim); width: 24px; flex-shrink: 0; }
+  .bar-track  { flex: 1; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.07); overflow: hidden; }
+  .bar-fill   { height: 100%; border-radius: 3px; transition: width 0.4s, background 0.4s; }
+  .bar-val    { font-family: 'Share Tech Mono', monospace; font-size: 0.7rem; color: var(--text-dim); width: 36px; text-align: right; flex-shrink: 0; }
+
+  /* ── Detail Panel ── */
+  #detail-panel {
+    padding: 14px 20px;
+    border-top: 1px solid var(--border);
+    min-height: 175px; flex-shrink: 0;
+  }
+  #detail-panel h3 {
+    font-size: 0.62rem; letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--text-dim); margin-bottom: 10px;
+  }
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat-box {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 6px; padding: 8px 10px;
+  }
+  .stat-box .s-label { font-size: 0.6rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim); }
+  .stat-box .s-val   { font-family: 'Share Tech Mono', monospace; font-size: 1.15rem; font-weight: 700; margin-top: 2px; }
+  .s-val.ok   { color: var(--health-green); }
+  .s-val.warn { color: #facc15; }
+  .s-val.crit { color: var(--health-red); }
+  .s-val.dead { color: #888; }
+
+  .slider-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  .slider-row label {
+    font-size: 0.65rem; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--text-dim); width: 80px; flex-shrink: 0;
+  }
+  .slider-row input[type=range] {
+    -webkit-appearance: none; flex: 1; height: 4px;
+    background: rgba(255,255,255,0.12); border-radius: 2px; outline: none; cursor: pointer;
+  }
+  .slider-row input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%;
+    background: var(--accent2); box-shadow: 0 0 6px rgba(192,132,252,0.6); cursor: pointer;
+  }
+  .slider-row .sval {
+    font-family: 'Share Tech Mono', monospace; font-size: 0.72rem;
+    color: var(--text); width: 34px; text-align: right; flex-shrink: 0;
+  }
+  #btn-reset-organ {
+    margin-top: 12px; width: 100%; padding: 6px;
+    border-radius: 6px; border: 1px solid var(--border);
+    background: rgba(124,111,247,0.08); color: var(--accent2);
+    font-family: 'Rajdhani', sans-serif; font-size: 0.72rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
+  }
+  #btn-reset-organ:hover { background: rgba(124,111,247,0.2); border-color: var(--accent); }
+
+  /* ── HUD ── */
+  #controls-hud {
+    position: absolute; bottom: 14px; left: 14px;
+    display: flex; gap: 6px; flex-direction: column; z-index: 50;
+  }
+  .hud-btn {
+    width: 34px; height: 34px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--panel-bg);
+    color: var(--text); font-size: 1.1rem; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(8px); transition: border-color 0.2s, background 0.2s;
+  }
+  .hud-btn:hover { border-color: var(--accent); background: rgba(124,111,247,0.15); }
+
+  #no-sel {
+    color: var(--text-dim); font-size: 0.8rem; letter-spacing: 0.08em;
+    text-align: center; padding: 20px 10px; line-height: 1.8;
+  }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>⬡ Homeostasis</h1>
+  <div class="filter-wrap">
+    <label>System</label>
+    <select id="sys-select"></select>
+    <span class="select-arrow">▼</span>
+  </div>
+</header>
+
+<div class="main">
+  <div id="viewport">
+    <div id="world">
+      <div id="human-body">
+        <img class="body-base" src="assets/body.png" alt="Human Body" draggable="false">
+      </div>
+    </div>
+    <div id="controls-hud">
+      <button class="hud-btn" id="btn-zoom-in"    title="Zoom in">＋</button>
+      <button class="hud-btn" id="btn-zoom-out"   title="Zoom out">－</button>
+      <button class="hud-btn" id="btn-view-reset" title="Reset view">⌂</button>
+    </div>
+  </div>
+
+  <div id="side-panel">
+    <div class="panel-header">
+      <h2>Selected Organ</h2>
+      <div id="selected-name">—</div>
+    </div>
+    <div class="organ-list-section" id="organ-list"></div>
+    <div id="detail-panel">
+      <div id="no-sel">Click an organ on the body<br>or in the list to inspect it.</div>
+      <div id="detail-content" style="display:none">
+        <h3>Vital Stats</h3>
+        <div class="stat-grid">
+          <div class="stat-box"><div class="s-label">Health</div><div class="s-val" id="d-health">—</div></div>
+          <div class="stat-box"><div class="s-label">Functionality</div><div class="s-val" id="d-func">—</div></div>
+        </div>
+        <div class="slider-row">
+          <label>Health</label>
+          <input type="range" id="sl-health" min="0" max="100" step="1">
+          <span class="sval" id="sl-health-val">100%</span>
+        </div>
+        <div class="slider-row">
+          <label>Function</label>
+          <input type="range" id="sl-func" min="0" max="100" step="1">
+          <span class="sval" id="sl-func-val">100%</span>
+        </div>
+        <button id="btn-reset-organ">↺ Reset this organ</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+//  ORGAN DEFAULTS  — master copy, never mutated after init
+//
+//  src      : path to the organ image
+//  scale    : multiplier on the image's natural size
+//  x / y    : top-left of the .organ-wrap, relative to #human-body
+//  zIndex   : stacking order (higher = in front)
+//  systems  : which organ systems this organ belongs to
+//  health   : 0-100
+//  functionality : 0-100
+// ═══════════════════════════════════════════════════════════════════
+const ORGAN_DEFAULTS = {
+  "Brain": {
+    src: "assets/organs/brain.png",
+    scale: 0.3, x: -5, y: -95, zIndex: 5,
+    systems: ["Nervous"],
+    health: 100, functionality: 100
+  },
+  "Heart": {
+    src: "assets/organs/heart.png",
+    scale: 0.15, x: 40, y: 75, zIndex: 4,
+    systems: ["Cardiovascular"],
+    health: 100, functionality: 100
+  },
+  "Left Lung": {
+    src: "assets/organs/left lung.png",
+    scale: 0.35, x: 165, y: 160, zIndex: 5,
+    systems: ["Respiratory"],
+    health: 100, functionality: 100
+  },
+  "Right Lung": {
+    src: "assets/organs/right lung.png",
+    scale: 0.35, x: 80, y: 160, zIndex: 5,
+    systems: ["Respiratory"],
+    health: 100, functionality: 100
+  },
+  "Trachea": {
+    src: "assets/organs/trachea.png",
+    scale: 0.3, x: 50, y: 120, zIndex: 4,
+    systems: ["Respiratory"],
+    health: 100, functionality: 100
+  },
+  "Thymus": {
+    src: "assets/organs/thymus.png",
+    scale: 0.35, x: 195, y: 230, zIndex: 1,
+    systems: ["Lymphatic", "Endocrine"],
+    health: 100, functionality: 100
+  },
+  "Liver": {
+    src: "assets/organs/liver.png",
+    scale: 0.45, x: 100, y: 380, zIndex: 4,
+    systems: ["Digestive"],
+    health: 100, functionality: 100
+  },
+  "Stomach": {
+    src: "assets/organs/stomach.png",
+    scale: 0.15, x: 10, y: 210, zIndex: 3,
+    systems: ["Digestive"],
+    health: 100, functionality: 100
+  },
+  "Pancreas": {
+    src: "assets/organs/pancreas.png",
+    scale: 0.15, x: 70, y: 360, zIndex: 1,
+    systems: ["Endocrine", "Digestive"],
+    health: 100, functionality: 100
+  },
+  "Intestines": {
+    src: "assets/organs/intestines.png",
+    scale: 0.8, x: 130, y: 450, zIndex: 5,
+    systems: ["Digestive"],
+    health: 100, functionality: 100
+  },
+};
+
+// ─── Live state — deep copy of defaults; only health/functionality change ───
+const organState = {};
+function resetAllOrgans() {
+  for (const name in ORGAN_DEFAULTS) {
+    const d = ORGAN_DEFAULTS[name];
+    if (!organState[name]) {
+      // First-time init: copy all fields including non-mutable layout info
+      organState[name] = { ...d, element: null };
+    } else {
+      // Subsequent resets: only restore the mutable stats
+      organState[name].health        = d.health;
+      organState[name].functionality = d.functionality;
+    }
+  }
+}
+resetAllOrgans();
+
+// ═══════════════════════════════════════════════════════════════════
+//  SYSTEM COLOURS
+// ═══════════════════════════════════════════════════════════════════
+const SYSTEM_COLORS = {
+  "Nervous":        "#a78bfa",
+  "Cardiovascular": "#f87171",
+  "Endocrine":      "#fbbf24",
+  "Digestive":      "#fb923c",
+  "Respiratory":    "#60a5fa",
+  "Musculoskeletal":"#e879f9",
+  "Reproductive":   "#f472b6",
+  "Urinary":        "#2dd4bf",
+  "Lymphatic":      "#86efac",
+};
+
+// ═══════════════════════════════════════════════════════════════════
+//  ANIMATED-ORGAN HELPERS
+//  Heart and Lungs have JS-driven scale animations.
+//  The rate slows as min(health, functionality) drops toward 0.
+// ═══════════════════════════════════════════════════════════════════
+// Returns a 0..1 vitality scalar for a given organ name
+function vitality(name) {
+  const o = organState[name];
+  return o ? Math.min(o.health, o.functionality) / 100 : 1;
+}
+
+// Heart beats per minute: 72 at full health, 20 at 0%
+function heartBPM()  { return 20  + vitality("Heart")  * 52; }
+// Breaths per minute: 15 at full health, 3 at 0%
+function breathBPM() {
+  const v = Math.min(vitality("Left Lung"), vitality("Right Lung"));
+  return 3 + v * 12;
+}
+
+// Animation clock
+let lastTs = null;
+let heartMs  = 0;   // accumulated ms within one heartbeat cycle
+let breathMs = 0;   // accumulated ms within one breath cycle
+
+// Heartbeat waveform:
+//   t in [0,1] within one beat cycle
+//   Two quick peaks (lub-DUB) then silence
+function heartScaleAt(t) {
+  const BASE = 1.0, LUB = 1.13, DUB = 1.07;
+  if      (t < 0.08)  return BASE + (LUB  - BASE) * Math.sin((t        / 0.08)  * Math.PI);
+  else if (t < 0.14)  return BASE;
+  else if (t < 0.26)  return BASE + (DUB  - BASE) * Math.sin(((t-0.14) / 0.12)  * Math.PI);
+  else                return BASE;
+}
+
+// Breath waveform: smooth sinusoid (inhale then exhale)
+function lungScaleAt(t) {
+  const BASE = 1.0, EXPAND = 1.09;
+  return BASE + (EXPAND - BASE) * Math.sin(t * Math.PI);
+}
+
+function animLoop(ts) {
+  if (lastTs === null) lastTs = ts;
+  const dt = ts - lastTs;
+  lastTs = ts;
+
+  // ── Heartbeat ──
+  const beatCycleMs = 60000 / heartBPM();
+  heartMs = (heartMs + dt) % beatCycleMs;
+  const heartT = heartMs / beatCycleMs;
+  const hw = organState["Heart"];
+  if (hw?.element) {
+    const s = hw.scale * heartScaleAt(heartT);
+    hw.element.style.transform = `scale(${s})`;
+  }
+
+  // ── Lungs ──
+  const breathCycleMs = 60000 / breathBPM();
+  breathMs = (breathMs + dt) % breathCycleMs;
+  const breathT = breathMs / breathCycleMs;
+  ["Left Lung", "Right Lung"].forEach(name => {
+    const lw = organState[name];
+    if (lw?.element) {
+      const s = lw.scale * lungScaleAt(breathT);
+      lw.element.style.transform = `scale(${s})`;
+    }
+  });
+
+  requestAnimationFrame(animLoop);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  UI STATE
+// ═══════════════════════════════════════════════════════════════════
+let selectedName = null;
+let activeSystem = "ALL";
+
+let viewScale = 0.7, panX = 80, panY = 20;
+let isPanning = false, panStart = { x: 0, y: 0 };
+const MIN_SCALE = 0.2, MAX_SCALE = 3;
+
+// ═══════════════════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════════════════
+document.addEventListener("DOMContentLoaded", () => {
+  buildDropdown();
+  buildOrgans();
+  buildOrganList();
+  initPanZoom();
+  applyTransform();
+  requestAnimationFrame(animLoop);
+});
+
+// ═══════════════════════════════════════════════════════════════════
+//  DROPDOWN
+// ═══════════════════════════════════════════════════════════════════
+function getAllSystems() {
+  const s = new Set();
+  Object.values(organState).forEach(o => o.systems.forEach(sys => s.add(sys)));
+  return ["ALL", ...[...s].sort()];
+}
+
+function buildDropdown() {
+  const sel = document.getElementById("sys-select");
+  getAllSystems().forEach(sys => {
+    const opt = document.createElement("option");
+    opt.value = sys;
+    opt.textContent = sys === "ALL" ? "All Systems" : sys;
+    sel.appendChild(opt);
+  });
+  sel.addEventListener("change", () => {
+    activeSystem = sel.value;
+    applyVisibility();
+  });
+}
+
+function applyVisibility() {
+  Object.entries(organState).forEach(([name, o]) => {
+    const show = activeSystem === "ALL" || o.systems.includes(activeSystem);
+    if (o.element) o.element.classList.toggle("hidden", !show);
+    const card = document.querySelector(`.organ-card[data-name="${name}"]`);
+    if (card) card.style.display = show ? "" : "none";
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  BUILD ORGAN DOM
+// ═══════════════════════════════════════════════════════════════════
+const ANIM_ORGANS = new Set(["Heart", "Left Lung", "Right Lung"]);
+
+function buildOrgans() {
+  const container = document.getElementById("human-body");
+  Object.entries(organState).forEach(([name, o]) => {
+    const wrap = document.createElement("div");
+    wrap.className = "organ-wrap" + (ANIM_ORGANS.has(name) ? " anim-organ" : "");
+    wrap.dataset.name = name;
+    wrap.style.cssText = `
+      left: ${o.x}px;
+      top:  ${o.y}px;
+      z-index: ${o.zIndex};
+      transform: scale(${o.scale});
+    `;
+    const img = document.createElement("img");
+    img.src = o.src;
+    img.alt = name;
+    img.draggable = false;
+
+    wrap.appendChild(img);
+    container.appendChild(wrap);
+    o.element = wrap;
+
+    wrap.addEventListener("click", () => selectOrgan(name));
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  ORGAN LIST
+// ═══════════════════════════════════════════════════════════════════
+function buildOrganList() {
+  const list = document.getElementById("organ-list");
+  list.innerHTML = "";
+  Object.entries(organState).forEach(([name, o]) => {
+    const card = document.createElement("div");
+    card.className = "organ-card";
+    card.dataset.name = name;
+    card.innerHTML = `
+      <div class="card-top">
+        <span class="card-name">${name}</span>
+        <span class="card-systems">${o.systems.join(" · ")}</span>
+      </div>
+      ${barHTML("HP", o.health)}
+      ${barHTML("FN", o.functionality)}
+    `;
+    card.addEventListener("click", () => selectOrgan(name));
+    list.appendChild(card);
+  });
+}
+
+function barHTML(label, val) {
+  return `
+    <div class="bar-row">
+      <span class="bar-label">${label}</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${val}%;background:${barColor(val)}"></div></div>
+      <span class="bar-val">${val}%</span>
+    </div>`;
+}
+
+function barColor(v) {
+  if (v > 60) return "var(--health-green)";
+  if (v > 20) return "#facc15";
+  return "var(--health-red)";
+}
+
+function updateOrganCard(name) {
+  const o    = organState[name];
+  const card = document.querySelector(`.organ-card[data-name="${name}"]`);
+  if (!card || !o) return;
+  const rows = card.querySelectorAll(".bar-row");
+  updateBarRow(rows[0], o.health);
+  updateBarRow(rows[1], o.functionality);
+}
+
+function updateBarRow(row, val) {
+  row.querySelector(".bar-fill").style.width      = val + "%";
+  row.querySelector(".bar-fill").style.background = barColor(val);
+  row.querySelector(".bar-val").textContent        = val + "%";
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  SELECTION
+// ═══════════════════════════════════════════════════════════════════
+function selectOrgan(name) {
+  selectedName = name;
+  document.querySelectorAll(".organ-card").forEach(c => c.classList.remove("selected"));
+  const card = document.querySelector(`.organ-card[data-name="${name}"]`);
+  if (card) card.classList.add("selected");
+
+  document.getElementById("selected-name").textContent    = name;
+  document.getElementById("no-sel").style.display          = "none";
+  document.getElementById("detail-content").style.display  = "";
+  refreshDetailPanel();
+}
+
+function refreshDetailPanel() {
+  const o = organState[selectedName];
+  if (!o) return;
+
+  const dh = document.getElementById("d-health");
+  const df = document.getElementById("d-func");
+  dh.textContent = o.health + "%";
+  df.textContent = o.functionality + "%";
+  dh.className   = "s-val " + statusClass(o.health);
+  df.className   = "s-val " + statusClass(o.functionality);
+
+  document.getElementById("sl-health").value           = o.health;
+  document.getElementById("sl-health-val").textContent = o.health + "%";
+  document.getElementById("sl-func").value             = o.functionality;
+  document.getElementById("sl-func-val").textContent   = o.functionality + "%";
+}
+
+function statusClass(v) {
+  if (v > 60) return "ok";
+  if (v > 20) return "warn";
+  if (v > 0)  return "crit";
+  return "dead";
+}
+
+// ─── Sliders ───
+document.getElementById("sl-health").addEventListener("input", e => {
+  if (!selectedName) return;
+  organState[selectedName].health = parseInt(e.target.value);
+  document.getElementById("sl-health-val").textContent = organState[selectedName].health + "%";
+  updateOrganVisuals(selectedName);
+  refreshDetailPanel();
+  updateOrganCard(selectedName);
+});
+
+document.getElementById("sl-func").addEventListener("input", e => {
+  if (!selectedName) return;
+  organState[selectedName].functionality = parseInt(e.target.value);
+  document.getElementById("sl-func-val").textContent = organState[selectedName].functionality + "%";
+  updateOrganVisuals(selectedName);
+  refreshDetailPanel();
+  updateOrganCard(selectedName);
+});
+
+// ─── Reset single organ to defaults ───
+document.getElementById("btn-reset-organ").addEventListener("click", () => {
+  if (!selectedName) return;
+  const d = ORGAN_DEFAULTS[selectedName];
+  organState[selectedName].health        = d.health;
+  organState[selectedName].functionality = d.functionality;
+  updateOrganVisuals(selectedName);
+  refreshDetailPanel();
+  updateOrganCard(selectedName);
+});
+
+// ═══════════════════════════════════════════════════════════════════
+//  PULSE CLASSES  (status indicators for non-animated organs)
+// ═══════════════════════════════════════════════════════════════════
+function updateOrganVisuals(name) {
+  const o = organState[name];
+  if (!o?.element) return;
+  const el = o.element;
+  el.classList.remove("pulse-health", "pulse-func", "pulse-both");
+
+  // Animated organs express distress through speed change, not pulse CSS
+  if (ANIM_ORGANS.has(name)) return;
+
+  const lh = o.health        < 20;
+  const lf = o.functionality < 20;
+  if (lh && lf)  el.classList.add("pulse-both");
+  else if (lh)   el.classList.add("pulse-health");
+  else if (lf)   el.classList.add("pulse-func");
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  PAN / ZOOM
+// ═══════════════════════════════════════════════════════════════════
+function applyTransform() {
+  document.getElementById("world").style.transform =
+    `translate(${panX}px, ${panY}px) scale(${viewScale})`;
+}
+
+function initPanZoom() {
+  const vp = document.getElementById("viewport");
+
+  vp.addEventListener("mousedown", e => {
+    if (e.button !== 0 || e.target.closest(".organ-wrap")) return;
+    isPanning = true;
+    panStart  = { x: e.clientX - panX, y: e.clientY - panY };
+    vp.classList.add("grabbing");
+  });
+  window.addEventListener("mousemove", e => {
+    if (!isPanning) return;
+    panX = e.clientX - panStart.x;
+    panY = e.clientY - panStart.y;
+    applyTransform();
+  });
+  window.addEventListener("mouseup", () => {
+    isPanning = false;
+    document.getElementById("viewport").classList.remove("grabbing");
+  });
+
+  let lastTouch = null;
+  vp.addEventListener("touchstart", e => {
+    if (e.touches.length === 1) lastTouch = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  }, { passive: true });
+  vp.addEventListener("touchmove", e => {
+    if (e.touches.length === 1 && lastTouch) {
+      panX += e.touches[0].clientX - lastTouch.x;
+      panY += e.touches[0].clientY - lastTouch.y;
+      lastTouch = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      applyTransform();
+    }
+  }, { passive: true });
+  vp.addEventListener("touchend", () => { lastTouch = null; });
+
+  vp.addEventListener("wheel", e => {
+    e.preventDefault();
+    const rect = vp.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    const factor   = e.deltaY < 0 ? 1.1 : 0.9;
+    const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, viewScale * factor));
+    panX = mx - (mx - panX) * (newScale / viewScale);
+    panY = my - (my - panY) * (newScale / viewScale);
+    viewScale = newScale;
+    applyTransform();
+  }, { passive: false });
+
+  document.getElementById("btn-zoom-in").addEventListener("click",    () => zoomCenter(1.2));
+  document.getElementById("btn-zoom-out").addEventListener("click",   () => zoomCenter(0.85));
+  document.getElementById("btn-view-reset").addEventListener("click", () => {
+    viewScale = 0.45; panX = 150; panY = 20; applyTransform();
+  });
+}
+
+function zoomCenter(factor) {
+  const vp   = document.getElementById("viewport");
+  const newS = Math.min(MAX_SCALE, Math.max(MIN_SCALE, viewScale * factor));
+  const mx   = vp.clientWidth / 2, my = vp.clientHeight / 2;
+  panX = mx - (mx - panX) * (newS / viewScale);
+  panY = my - (my - panY) * (newS / viewScale);
+  viewScale = newS;
+  applyTransform();
+}
+</script>
+</body>
+</html>
